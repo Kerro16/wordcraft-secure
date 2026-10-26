@@ -12,7 +12,7 @@ jobs:
     env:
       CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: rustup update stable --no-self-update && rustup default stable && rustc --version
       - name: Update ctutils to the patched release (RUSTSEC-2026-0385) and prune craft-update from the lockfile
@@ -37,11 +37,11 @@ jobs:
           Copy-Item "$bin/wordcraft.exe", "$bin/wordcraft-cli.exe" $out
           Copy-Item LICENSE-MIT, LICENSE-APACHE, NOTICE, ATTRIBUTION.md, SECURITY-CHANGES.md $out
           Compress-Archive -Path $out -DestinationPath wordcraft-portable-windows-x64.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wordcraft-portable-windows-x64
           path: wordcraft-portable-windows-x64.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Cargo.lock
           path: Cargo.lock
