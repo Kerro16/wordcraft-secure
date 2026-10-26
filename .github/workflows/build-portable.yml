@@ -1,0 +1,46 @@
+name: Build portable Windows zip
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup update stable --no-self-update && rustup default stable && rustc --version
+      - name: Build (static C runtime, no Visual C++ redistributable needed)
+        run: cargo build --release -p wordcraft -p wordcraft-cli --target x86_64-pc-windows-msvc
+      - name: Package
+        shell: pwsh
+        run: |
+          $out = "wordcraft-portable"
+          New-Item -ItemType Directory $out | Out-Null
+          $bin = "target/x86_64-pc-windows-msvc/release"
+          Copy-Item "$bin/wordcraft.exe", "$bin/wordcraft-cli.exe" $out
+          Copy-Item LICENSE-MIT, LICENSE-APACHE, NOTICE, ATTRIBUTION.md, SECURITY-CHANGES.md $out
+          Compress-Archive -Path $out -DestinationPath wordcraft-portable-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wordcraft-portable-windows-x64
+          path: wordcraft-portable-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cargo.lock
+          path: Cargo.lock
+      - name: Publish release
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "build-$env:GITHUB_RUN_NUMBER"
+          gh release create $tag wordcraft-portable-windows-x64.zip --title "Portable build $env:GITHUB_RUN_NUMBER" --notes "Portable Windows x64 build. Unzip and run wordcraft.exe; no installation or Rust needed. Auto-updater removed."
