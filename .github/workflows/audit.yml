@@ -1,0 +1,44 @@
+name: Security audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust and cargo-audit
+        run: |
+          rustup update stable --no-self-update
+          cargo install cargo-audit --locked
+      - name: Resolve lockfile without craft-update
+        run: cargo metadata --format-version 1 --filter-platform x86_64-pc-windows-msvc --quiet > $null
+      - name: cargo audit (known vulnerabilities, RUSTSEC)
+        continue-on-error: true
+        run: cargo audit
+      - name: Which crates pull in networking, for the shipped Windows binary
+        continue-on-error: true
+        run: |
+          foreach ($c in 'ureq','reqwest','hyper','rustls','craft-update','sigstore-verify','tokio','native-tls','winhttp','windows-sys') {
+            Write-Output "=== cargo tree -i $c (normal deps, windows target) ==="
+            cargo tree -i $c -e normal --target x86_64-pc-windows-msvc -p wordcraft 2>&1 | Select-Object -First 25
+          }
+      - name: Imports of the released exe
+        shell: pwsh
+        run: |
+          gh release download build-1 -R Kerro16/wordcraft-secure -p '*.zip'
+          Expand-Archive wordcraft-portable-windows-x64.zip -DestinationPath rel
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC" -Recurse -Filter dumpbin.exe | Where-Object { $_.FullName -match 'Hostx64\x64' } | Select-Object -First 1
+          foreach ($exe in 'wordcraft.exe','wordcraft-cli.exe') {
+            Write-Output "=== DLL dependencies: $exe ==="
+            & $dumpbin.FullName /dependents "rel/wordcraft-portable/$exe"
+            Write-Output "=== network-related imports: $exe ==="
+            & $dumpbin.FullName /imports "rel/wordcraft-portable/$exe" | Select-String -Pattern 'ws2_32|winhttp|wininet|urlmon|dnsapi|iphlpapi|WSAStartup|connect|getaddrinfo|InternetOpen|WinHttp'
+          }
+        env:
+          GH_TOKEN: ${{ github.token }}
